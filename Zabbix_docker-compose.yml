@@ -1,0 +1,94 @@
+version: "3.9"
+ 
+services:
+ 
+  zabbix-mariadb:
+    image: mariadb:10.11.3
+    container_name: zabbix-mariadb
+    hostname: zabbix-mariadb
+    restart: always
+    environment:
+      TZ: "Europe/Moscow"
+      MYSQL_ROOT_USER: root
+      MYSQL_ROOT_PASSWORD: ${ROOT_MYSQL_PASS}
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: ${ZABBIX_DB_PASS}
+    networks:
+      portainer_docker_main_net:
+       ipv4_address: 10.172.20.150
+    volumes:
+      - /mnt/nvme_01/volumes/zabbix/mariadb/data:/var/lib/mysql
+ 
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql:ubuntu-6.4.2
+    container_name: zabbix-server
+    hostname: zabbix-server
+    restart: always
+    environment:
+      TZ: "Europe/Moscow"
+      DB_SERVER_HOST: zabbix-mariadb
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: ${ZABBIX_DB_PASS}
+      ZBX_CACHESIZE: 12G
+      ZBX_VALUECACHESIZE: 12G
+      ZBX_HOUSEKEEPINGFREQUENCY: 1
+      ZBX_MAXHOUSEKEEPERDELETE: 50000
+
+    networks:
+        portainer_docker_main_net:
+          ipv4_address: 10.172.20.160
+    ports:
+      - 172.16.20.166:10051:10051
+    depends_on:
+      - zabbix-mariadb
+ 
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql:ubuntu-6.4.2
+    container_name: zabbix-web
+    hostname: zabbix-web
+    restart: always
+    environment:
+      TZ: "Europe/Moscow"
+      DB_SERVER_HOST: zabbix-mariadb
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: ${ZABBIX_DB_PASS}
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: "Europe/Moscow"
+#    ports:
+#      - 8080:8080
+#      - 8443:8443
+    networks:
+        portainer_docker_main_net:
+           ipv4_address: 10.172.20.170
+    depends_on:
+      - zabbix-mariadb
+      - zabbix-server
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zabbix-web.rule=Host(`zabbix-net.uniconf.ru`)"
+      - "traefik.http.routers.zabbix-web.entrypoints=websecure"
+      - "traefik.http.routers.zabbix-web.tls=true"
+  #    - "traefik.http.routers.zabbix-web.tls.certresolver=myresolver"
+      - "traefik.http.services.zabbix-web.loadbalancer.server.port=8080"
+      
+  agent:
+    container_name: zabbix-agent
+    hostname: zabbix-agent
+    image: zabbix/zabbix-agent2:ubuntu-6.4.2
+    environment:
+      TZ: "Europe/Moscow"
+      ZBX_HOSTNAME: zabbix-server
+      ZBX_SERVER_HOST: zabbix-server
+#    volumes:
+#      - /mnt/nvme_01/volumes/zabbix/zabbix_agent:/etc
+    networks:
+     portainer_docker_main_net:
+      ipv4_address: 10.172.20.180
+    ports:
+      - "172.16.20.166:10050:10050"
+    restart: always
+
+networks:
+   portainer_docker_main_net:
+     external: true
