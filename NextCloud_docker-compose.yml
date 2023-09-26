@@ -1,0 +1,82 @@
+version: '3'
+
+services:
+  
+  redis:
+    image: redis:alpine
+    restart: always
+    networks:
+       portainer_docker_main_net:
+         ipv4_address: 10.172.20.230
+    volumes:
+      - nextcloud_ekb_redis:/data
+ #   environment:
+ #     - ENABLE_OVERCOMMIT_MEMORY=true
+
+  db:
+    image: mariadb:10.11.4
+    restart: always
+    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+    networks:
+       portainer_docker_main_net:
+         ipv4_address: 10.172.20.210
+    volumes:
+      - nextcloud_ekb_db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=Fvbshg56Qazc!
+      - MYSQL_PASSWORD=password_strong!
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+
+  nextcloud:
+    image: nextcloud:27.0.0
+    restart: always
+#    ports:
+#      - 8080:80
+    links:
+      - db
+    networks:
+       portainer_docker_main_net:
+         ipv4_address: 10.172.20.220
+    volumes:
+      - nextcloud_ekb_nextcloud_config:/var/www/html
+      - /mnt/data01/volumes/nc_data:/var/www/html/data
+    environment:
+      - MYSQL_PASSWORD=password_strong!
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_HOST=db
+      - NEXTCLOUD_TRUSTED_DOMAINS=cloud-ekb.uniconf.ru
+      - PHP_MEMORY_LIMIT=2G
+      - PHP_UPLOAD_LIMIT=10G
+      - TRUSTED_PROXIES=10.172.20.200 #traefik IP
+      - DEFAULT_PHONE_REGION=RU
+      - REDIS_HOST=redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nextcloud.rule=Host(`cloud-ekb.uniconf.ru`)"
+      - "traefik.http.routers.nextcloud.entrypoints=websecure"
+      - "traefik.http.routers.nextcloud.tls=true"
+    #  - "traefik.http.routers.nextcloud.tls.certresolver=tlsresolv"
+      - "traefik.http.middlewares.nextcloudredir.redirectregex.permanent=true"
+      - "traefik.http.middlewares.nextcloudredir.redirectregex.regex=https://(.*)/.well-known/(card|cal)dav"
+      - "traefik.http.middlewares.nextcloudredir.redirectregex.replacement=https://$$1/remote.php/dav/"
+      - "traefik.http.middlewares.nextcloudsts.headers.stsincludesubdomains=false"
+      - "traefik.http.middlewares.nextcloudsts.headers.stspreload=true"
+      - "traefik.http.middlewares.nextcloudsts.headers.stsseconds=31536000"
+      - "traefik.http.middlewares.nextcloudsts.headers.isdevelopment=false"
+      - "traefik.http.routers.nextcloud.middlewares=nextcloudredir,nextcloudsts"
+      - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
+
+
+networks:
+  portainer_docker_main_net:
+    external: true
+
+volumes:
+  nextcloud_ekb_nextcloud_config:
+      external: true
+  nextcloud_ekb_db:
+      external: true
+  nextcloud_ekb_redis:
+      external: true
