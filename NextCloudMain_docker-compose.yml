@@ -1,0 +1,41 @@
+version: "3.9"
+ 
+services:
+ 
+  traefik:
+    image: "traefik:3.0"
+    restart: "always"
+    container_name: "traefik"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--log.level=DEBUG"
+       # Define entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.websecure.address=:443"
+      # Define docker provider
+      - "--providers.file.directory=/configuration/"
+      - "--providers.file.watch=true"
+       # Disable SSL verification on backend
+      - "--serverstransport.insecureskipverify=true"
+    ports:
+      - "443:443"
+    networks:
+        portainer_net_docker_dmz:
+          ipv4_address: 10.172.30.200
+    volumes:
+      - "/opt/docker/traefik/configuration:/configuration/:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`docker02-traefik.uniconf.ru`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.service=api@internal"
+
+networks:
+  portainer_net_docker_dmz:
+    external: true
+
